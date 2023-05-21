@@ -1,1 +1,4 @@
 secrets.py
+
+.DS_Store
+lib/.DS_Store
