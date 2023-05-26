@@ -7,6 +7,7 @@ from digitalio import DigitalInOut
 import neopixel
 from adafruit_esp32spi import adafruit_esp32spi
 from adafruit_esp32spi import adafruit_esp32spi_wifimanager
+from adafruit_display_shapes.rect import Rect
 
 # Import secrets file
 try:
@@ -94,6 +95,10 @@ def download_file(url, fname, chunk_size=4096, headers=None):
             if not remaining:
                 break
     response.close() 
+    
+# Create main display group
+main_group = displayio.Group()
+board.DISPLAY.show(main_group)
    
    
 # Display splash image
@@ -101,7 +106,7 @@ splash_group = displayio.Group()
 image = displayio.OnDiskBitmap("/splash.bmp")
 image_sprite = displayio.TileGrid(image, pixel_shader=image.pixel_shader)
 splash_group.append(image_sprite)
-board.DISPLAY.show(splash_group)
+main_group.append(splash_group)
 
 # Configure WIFI manager
 esp32_cs = DigitalInOut(board.ESP_CS)
@@ -171,7 +176,7 @@ map_group = displayio.Group()
 image = displayio.OnDiskBitmap(image_fname)
 image_sprite = displayio.TileGrid(image, pixel_shader=image.pixel_shader)
 map_group.append(image_sprite)
-board.DISPLAY.show(map_group)
+main_group.append(map_group)
 
 # Processing loop
 while True:
