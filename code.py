@@ -58,6 +58,18 @@ def get_bounds(lat, lon, distance, ratio=1):
 
     return max_lat, min_lat, max_lon, min_lon
     
+
+def url_encode(string):
+    ''' Return URL encoding of input string '''
+
+    encoded_string = ''
+    for char in string:
+        if char.isalpha() or char.isdigit() or char in ('-', '_', '.', '~'):
+            encoded_string += char
+        else:
+            encoded_string += '%' + '{:02X}'.format(ord(char))
+    
+    return encoded_string
     
 def download_file(url, fname, chunk_size=4096, headers=None):
     ''' Download file from URL and store locally '''
@@ -82,14 +94,14 @@ def download_file(url, fname, chunk_size=4096, headers=None):
             if not remaining:
                 break
     response.close() 
-
-
+   
+   
 # Display splash image
-splash = displayio.Group()
+splash_group = displayio.Group()
 image = displayio.OnDiskBitmap("/splash.bmp")
 image_sprite = displayio.TileGrid(image, pixel_shader=image.pixel_shader)
-splash.append(image_sprite)
-board.DISPLAY.show(splash)
+splash_group.append(image_sprite)
+board.DISPLAY.show(splash_group)
 
 # Configure WIFI manager
 esp32_cs = DigitalInOut(board.ESP_CS)
@@ -121,7 +133,7 @@ print("Calculating map bounds...")
 lat_max, lat_min, lon_max, lon_min = get_bounds(center_lat, center_lon, distance, ratio=aspect_ratio)
 
 # Geoapify map URL parameters
-params = {
+map_params = {
     "style": "klokantech-basic",
     "width": display_width * 2,
     "height": display_height * 2,
@@ -131,60 +143,35 @@ params = {
 }
 
 # Build Geoapify map URL
-params_str = "&".join(["%s=%s" % (key, value) for key, value in params.items()])
-map_url = "https://maps.geoapify.com/v1/staticmap?" + params_str
+map_params_str = "&".join(["%s=%s" % (key, value) for key, value in map_params.items()])
+map_url = "https://maps.geoapify.com/v1/staticmap?" + map_params_str
 print('Geoapify map URL: ')
 print(map_url)
 
-# Create CloudConvert job tasks
-body = {
-  "tasks": {
-    "import-my-file": {
-      "operation": "import/url",
-      "url": map_url
-    },
-    "convert-my-file": {
-      "operation": "convert",
-      "input": "import-my-file",
-      "input_format": "png",
-      "output_format": "bmp",
-      "width": display_width,
-      "height": display_height
-    },
-    "export-my-file": {
-      "operation": "export/url",
-      "input": "convert-my-file"
-    }
-  }
+# Adafruit IO image convert URL parameters
+convert_params = {
+    "x-aio-key": secrets["aio_key"],
+    "width": display_width,
+    "height": display_height,
+    "output": "BMP16",
+    "url": url_encode(map_url)
 }
 
-# Request to run conversion job
-print("Performing image conversion...")
-convert_url = "https://sync.api.cloudconvert.com/v2/jobs"
-response = wifi.post(
-    convert_url,
-    headers={"Authorization": "Bearer " + secrets["cloudconvert_key"]},
-    json=body
-)
+# Build Adafruit IO image convert URL
+convert_params_str = "&".join(["%s=%s" % (key, value) for key, value in convert_params.items()])
+convert_url =  f"https://io.adafruit.com/api/v2/{secrets["aio_username"]}/integrations/image-formatter?" + convert_params_str
 
-# Get URL of converted image
-data = response.json()["data"]
-export_task = [task for task in data["tasks"] if task["name"] == "export-my-file"][0]
-converted_url = export_task["result"]["files"][0]["url"]
-print("Converted image url:")
-print(converted_url)
-
-# Download converted image
+# Download converted map image
 image_fname = "/map.bmp"
 print("Downloading converted image...")
-download_file(converted_url, image_fname)
+download_file(convert_url, image_fname)
 
-# Display image
-map = displayio.Group()
+# Display converted map image
+map_group = displayio.Group()
 image = displayio.OnDiskBitmap(image_fname)
 image_sprite = displayio.TileGrid(image, pixel_shader=image.pixel_shader)
-map.append(image_sprite)
-board.DISPLAY.show(map)
+map_group.append(image_sprite)
+board.DISPLAY.show(map_group)
 
 # Processing loop
 while True:
