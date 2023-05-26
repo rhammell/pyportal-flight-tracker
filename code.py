@@ -67,7 +67,6 @@ def download_file(url, fname, chunk_size=4096, headers=None):
 
     # Determine content length from response
     headers = {}
-    print(response.headers)
     for title, content in response.headers.items():
         headers[title.lower()] = content
     content_length = int(headers["content-length"])
@@ -102,7 +101,7 @@ status_light = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
 wifi = adafruit_esp32spi_wifimanager.ESPSPI_WiFiManager(esp, secrets, status_light)
 
 # Connect WiFi
-print('Connecting to wifi...')
+print("Connecting to wifi...")
 wifi.connect()
 
 # Define map center
@@ -118,11 +117,11 @@ display_height = board.DISPLAY.height
 aspect_ratio = display_width / display_height
 
 # Calculate bounds
-print('Calculating map bounds...')
+print("Calculating map bounds...")
 lat_max, lat_min, lon_max, lon_min = get_bounds(center_lat, center_lon, distance, ratio=aspect_ratio)
 
 # Geoapify map URL parameters
-map_params = {
+params = {
     "style": "klokantech-basic",
     "width": display_width * 2,
     "height": display_height * 2,
@@ -132,7 +131,8 @@ map_params = {
 }
 
 # Build Geoapify map URL
-map_url = "https://maps.geoapify.com/v1/staticmap?" + "&".join([f"{key}={value}" for key, value in map_params.items()])
+params_str = "&".join(["%s=%s" % (key, value) for key, value in params.items()])
+map_url = "https://maps.geoapify.com/v1/staticmap?" + params_str
 print('Geoapify map URL: ')
 print(map_url)
 
@@ -158,34 +158,34 @@ body = {
   }
 }
 
-# Run image conversion job
-print('Performing image conversion...')
-convert_url = 'https://sync.api.cloudconvert.com/v2/jobs'
+# Request to run conversion job
+print("Performing image conversion...")
+convert_url = "https://sync.api.cloudconvert.com/v2/jobs"
 response = wifi.post(
     convert_url,
-    headers={'Authorization': f'Bearer {secrets["cloudconvert_key"]}'},
+    headers={"Authorization": "Bearer " + secrets["cloudconvert_key"]},
     json=body
 )
 
 # Get URL of converted image
 data = response.json()["data"]
-export_task = [task for task in data["tasks"] if task["name"] == 'export-my-file'][0]
+export_task = [task for task in data["tasks"] if task["name"] == "export-my-file"][0]
 converted_url = export_task["result"]["files"][0]["url"]
-print('Converted image url:')
+print("Converted image url:")
 print(converted_url)
 
 # Download converted image
 image_fname = "/map.bmp"
-print('Downloading converted image...')
+print("Downloading converted image...")
 download_file(converted_url, image_fname)
 
 # Display image
+map = displayio.Group()
 image = displayio.OnDiskBitmap(image_fname)
 image_sprite = displayio.TileGrid(image, pixel_shader=image.pixel_shader)
-map = displayio.Group()
 map.append(image_sprite)
 board.DISPLAY.show(map)
 
 # Processing loop
 while True:
-  pass
+    pass
