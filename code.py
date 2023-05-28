@@ -7,7 +7,12 @@ from digitalio import DigitalInOut
 import neopixel
 from adafruit_esp32spi import adafruit_esp32spi
 from adafruit_esp32spi import adafruit_esp32spi_wifimanager
-from adafruit_display_shapes.rect import Rect
+from adafruit_datetime import datetime
+from circuitpython_base64 import b64encode
+
+
+# Set display brightness
+board.DISPLAY.brightness = 0.2
 
 # Import secrets file
 try:
@@ -15,12 +20,12 @@ try:
 except ImportError:
     print("Missing secrets.py file!")
     raise
-    
+
 
 def get_bounds(lat, lon, distance, ratio=1):
     ''' Return min/max bounds for box centered on input
         lat/lon coordinate for input distance
-        
+
         Ratio parameter determines the width:height ratio
         of the resulting box dimensions
     '''
@@ -34,7 +39,7 @@ def get_bounds(lat, lon, distance, ratio=1):
 
     # Calculate angular distance in radians
     rad_dist = distance / EARTH_RADIUS
-    
+
     # Calculate distance deltas
     delta_lat = rad_dist
     delta_lon = math.asin(math.sin(rad_dist) / math.cos(rad_lat))
@@ -42,7 +47,7 @@ def get_bounds(lat, lon, distance, ratio=1):
         delta_lat *= ratio
     else:
         delta_lon *= ratio
-        
+
     # Calculate latitude bounds
     min_rad_lat = rad_lat - delta_lat
     max_rad_lat = rad_lat + delta_lat
@@ -50,7 +55,7 @@ def get_bounds(lat, lon, distance, ratio=1):
     # Calculate longitude bounds
     min_rad_lon = rad_lon - delta_lon
     max_rad_lon = rad_lon + delta_lon
-    
+
     # Convert from radians to degrees
     max_lat = math.degrees(max_rad_lat)
     min_lat = math.degrees(min_rad_lat)
@@ -58,7 +63,7 @@ def get_bounds(lat, lon, distance, ratio=1):
     min_lon = math.degrees(min_rad_lon)
 
     return max_lat, min_lat, max_lon, min_lon
-    
+
 
 def url_encode(string):
     ''' Return URL encoding of input string '''
@@ -69,9 +74,17 @@ def url_encode(string):
             encoded_string += char
         else:
             encoded_string += '%' + '{:02X}'.format(ord(char))
-    
+
     return encoded_string
-    
+
+
+def build_url(url, params={}):
+    ''' Return URL with formatted parameters added '''
+
+    params_str = "&".join(["%s=%s" % (key, value) for key, value in params.items()])
+    return url + "?" + params_str
+
+
 def download_file(url, fname, chunk_size=4096, headers=None):
     ''' Download file from URL and store locally '''
 
@@ -94,13 +107,12 @@ def download_file(url, fname, chunk_size=4096, headers=None):
             file.write(i)
             if not remaining:
                 break
-    response.close() 
-    
+    response.close()
+
 # Create main display group
 main_group = displayio.Group()
 board.DISPLAY.show(main_group)
-   
-   
+
 # Display splash image
 splash_group = displayio.Group()
 image = displayio.OnDiskBitmap("/splash.bmp")
@@ -126,7 +138,7 @@ center_lat = 40.7831
 center_lon = -73.9712
 
 # Map distance (km)
-distance = 20
+distance = 50
 
 # Display dimensions
 display_width = board.DISPLAY.width
@@ -137,7 +149,7 @@ aspect_ratio = display_width / display_height
 print("Calculating map bounds...")
 lat_max, lat_min, lon_max, lon_min = get_bounds(center_lat, center_lon, distance, ratio=aspect_ratio)
 
-# Geoapify map URL parameters
+# Build Geoapify map URL
 map_params = {
     "style": "klokantech-basic",
     "width": display_width * 2,
@@ -146,14 +158,10 @@ map_params = {
     "format": "png",
     "area": "rect:%f,%f,%f,%f" % (lon_max, lat_max, lon_min, lat_min)
 }
+map_url = build_url("https://maps.geoapify.com/v1/staticmap", map_params)
+print('Geoapify map URL: ' + map_url)
 
-# Build Geoapify map URL
-map_params_str = "&".join(["%s=%s" % (key, value) for key, value in map_params.items()])
-map_url = "https://maps.geoapify.com/v1/staticmap?" + map_params_str
-print('Geoapify map URL: ')
-print(map_url)
-
-# Adafruit IO image convert URL parameters
+# Build Adafruit IO image convert URL
 convert_params = {
     "x-aio-key": secrets["aio_key"],
     "width": display_width,
@@ -161,10 +169,10 @@ convert_params = {
     "output": "BMP16",
     "url": url_encode(map_url)
 }
-
-# Build Adafruit IO image convert URL
-convert_params_str = "&".join(["%s=%s" % (key, value) for key, value in convert_params.items()])
-convert_url =  f"https://io.adafruit.com/api/v2/{secrets["aio_username"]}/integrations/image-formatter?" + convert_params_str
+convert_url = build_url(
+    f"https://io.adafruit.com/api/v2/{secrets["aio_username"]}/integrations/image-formatter",
+    convert_params
+)
 
 # Download converted map image
 image_fname = "/map.bmp"
@@ -178,6 +186,37 @@ image_sprite = displayio.TileGrid(image, pixel_shader=image.pixel_shader)
 map_group.append(image_sprite)
 main_group.append(map_group)
 
+# Build OpenSky URL
+opensky_params = {
+    "lamin": lat_min,
+    "lamax": lat_max,
+    "lomin": lon_min,
+    "lomax": lon_max
+}
+opensky_url = build_url(
+    "https://opensky-network.org/api/states/all",
+    opensky_params
+)
+print('OpenSky search URL:' + opensky_url)
+
+# Build request headers
+auth_credentials = secrets["opensky_username"] + ":" + secrets["opensky_password"]
+auth_token = b64encode(auth_credentials.encode("utf-8")).decode("ascii")
+headers = {'Authorization': 'Basic ' + auth_token}
+
 # Processing loop
 while True:
-    pass
+    
+    # Request Opensky data
+    print('Requesting data from Opensky...')
+    response = wifi.get(opensky_url, headers=headers)
+    
+    # Parse Opensky response
+    data = response.json()
+    response_time = data["time"]
+    states = data["states"]
+    print("Opensky data collected at " + str(datetime.fromtimestamp(response_time)))
+    print("Number of aircraft inside bounds: %s" % (len(states) if states else 0))
+
+    # Delay between loops
+    time.sleep(30)
