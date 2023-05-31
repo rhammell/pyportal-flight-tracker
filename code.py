@@ -1,3 +1,4 @@
+import gc
 import math
 import time
 import board
@@ -9,10 +10,12 @@ from adafruit_esp32spi import adafruit_esp32spi
 from adafruit_esp32spi import adafruit_esp32spi_wifimanager
 from adafruit_datetime import datetime
 from circuitpython_base64 import b64encode
+from adafruit_display_shapes.rect import Rect
+import adafruit_imageload
 
 
 # Set display brightness
-board.DISPLAY.brightness = 0.2
+board.DISPLAY.brightness = 0.05
 
 # Import secrets file
 try:
@@ -20,6 +23,25 @@ try:
 except ImportError:
     print("Missing secrets.py file!")
     raise
+
+
+def map_range(value, in_min, in_max, out_min, out_max):
+    return out_min + (((value - in_min) / (in_max - in_min)) * (out_max - out_min))
+
+def calculate_pixel_position(lat, lon, image_width, image_height, lat_min, lat_max, lon_min, lon_max):
+    # Calculate x-coordinate
+    x = map_range(lon, lon_min, lon_max, 0, image_width)
+
+    # Calculate y-coordinate using the Mercator projection
+    lat_rad = math.radians(lat)
+    lat_max_rad = math.radians(lat_max)
+    lat_min_rad = math.radians(lat_min)
+    merc_lat = math.log(math.tan(math.pi/4 + lat_rad/2))
+    merc_max = math.log(math.tan(math.pi/4 + lat_max_rad/2))
+    merc_min = math.log(math.tan(math.pi/4 + lat_min_rad/2))
+    y = map_range(merc_lat, merc_max, merc_min, 0, image_height)
+
+    return int(x), int(y)
 
 
 def get_bounds(lat, lon, distance, ratio=1):
@@ -138,7 +160,7 @@ center_lat = 40.7831
 center_lon = -73.9712
 
 # Map distance (km)
-distance = 50
+distance = 20
 
 # Display dimensions
 display_width = board.DISPLAY.width
@@ -204,19 +226,71 @@ auth_credentials = secrets["opensky_username"] + ":" + secrets["opensky_password
 auth_token = b64encode(auth_credentials.encode("utf-8")).decode("ascii")
 headers = {'Authorization': 'Basic ' + auth_token}
 
+# Create aircraft display group
+aircraft_group = displayio.Group()
+main_group.append(aircraft_group)
+
+# Load aircraft icon sheet
+icon_sheet, palette = adafruit_imageload.load(
+    "icons.bmp",
+    bitmap=displayio.Bitmap,
+    palette=displayio.Palette,
+)
+palette.make_transparent(0)
+
 # Processing loop
 while True:
-    
+
     # Request Opensky data
     print('Requesting data from Opensky...')
     response = wifi.get(opensky_url, headers=headers)
-    
+
     # Parse Opensky response
+    gc.collect()
     data = response.json()
     response_time = data["time"]
     states = data["states"]
     print("Opensky data collected at " + str(datetime.fromtimestamp(response_time)))
     print("Number of aircraft inside bounds: %s" % (len(states) if states else 0))
+
+    # Clear previous aircraft icons
+    while len(aircraft_group):
+        aircraft_group.pop(-1)
+
+    # Process aircraft data
+    if states:
+        for state in states:
+
+            # Get position data
+            lon = state[5]
+            lat = state[6]
+            track = state[10]
+
+            # Skip aircraft with empty data
+            if not lat or not lon or not track:
+                continue
+
+            # Calculate icon x/y coordinate
+            x, y =  calculate_pixel_position(lat, lon, display_width, display_height, lat_min, lat_max, lon_min, lon_max)
+
+            # Calculate icon tile index
+            tile_index = int((track + 23) / 45)
+
+            # Add aircraft icon
+            tile_size = 16
+            icon = displayio.TileGrid(
+                icon_sheet,
+                pixel_shader=palette,
+                width = 1,
+                height = 1,
+                tile_width = tile_size,
+                tile_height = tile_size,
+                x = x,
+                y = y,
+                default_tile=tile_index
+            )
+            aircraft_group.append(icon)
+
 
     # Delay between loops
     time.sleep(30)
