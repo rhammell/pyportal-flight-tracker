@@ -1,21 +1,17 @@
-import gc
 import math
 import time
 import board
 import busio
 import displayio
-from digitalio import DigitalInOut
+import terminalio
 import neopixel
+import digitalio
+import adafruit_imageload
 from adafruit_esp32spi import adafruit_esp32spi
 from adafruit_esp32spi import adafruit_esp32spi_wifimanager
 from adafruit_datetime import datetime
+from adafruit_display_text import label
 from circuitpython_base64 import b64encode
-from adafruit_display_shapes.rect import Rect
-import adafruit_imageload
-
-
-# Set display brightness
-board.DISPLAY.brightness = 0.05
 
 # Import secrets file
 try:
@@ -26,9 +22,15 @@ except ImportError:
 
 
 def map_range(value, in_min, in_max, out_min, out_max):
+    ''' Map input value to output range '''
+
     return out_min + (((value - in_min) / (in_max - in_min)) * (out_max - out_min))
 
 def calculate_pixel_position(lat, lon, image_width, image_height, lat_min, lat_max, lon_min, lon_max):
+    ''' Return x/y pixel coordinate for input lat/lon values, for
+        given image size and bounds
+    '''
+
     # Calculate x-coordinate
     x = map_range(lon, lon_min, lon_max, 0, image_width)
 
@@ -131,9 +133,11 @@ def download_file(url, fname, chunk_size=4096, headers=None):
                 break
     response.close()
 
-# Create main display group
+
+# Create display and main group
+display = board.DISPLAY
 main_group = displayio.Group()
-board.DISPLAY.show(main_group)
+display.root_group = main_group
 
 # Display splash image
 splash_group = displayio.Group()
@@ -143,9 +147,9 @@ splash_group.append(image_sprite)
 main_group.append(splash_group)
 
 # Configure WIFI manager
-esp32_cs = DigitalInOut(board.ESP_CS)
-esp32_ready = DigitalInOut(board.ESP_BUSY)
-esp32_reset = DigitalInOut(board.ESP_RESET)
+esp32_cs = digitalio.DigitalInOut(board.ESP_CS)
+esp32_ready = digitalio.DigitalInOut(board.ESP_BUSY)
+esp32_reset = digitalio.DigitalInOut(board.ESP_RESET)
 spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
 esp = adafruit_esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
 status_light = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
@@ -226,11 +230,8 @@ auth_credentials = secrets["opensky_username"] + ":" + secrets["opensky_password
 auth_token = b64encode(auth_credentials.encode("utf-8")).decode("ascii")
 headers = {'Authorization': 'Basic ' + auth_token}
 
-# Create aircraft display group
-aircraft_group = displayio.Group()
-main_group.append(aircraft_group)
-
 # Load aircraft icon sheet
+tile_size = 16
 icon_sheet, palette = adafruit_imageload.load(
     "icons.bmp",
     bitmap=displayio.Bitmap,
@@ -238,20 +239,43 @@ icon_sheet, palette = adafruit_imageload.load(
 )
 palette.make_transparent(0)
 
+# Create aircraft display group
+aircraft_group = displayio.Group()
+main_group.append(aircraft_group)
+
+# Create time label and display group
+time_label = label.Label(
+    font = terminalio.FONT,
+    color=0x000000,
+    background_color=0xFFFFFF,
+    anchor_point=(0,0),
+    anchored_position=(5,5),
+    padding_top = 2,
+    padding_bottom = 2,
+    padding_left = 2,
+    padding_right = 2
+)
+time_group  = displayio.Group()
+time_group.append(time_label)
+main_group.append(time_group)
+
 # Processing loop
 while True:
 
     # Request Opensky data
     print('Requesting data from Opensky...')
     response = wifi.get(opensky_url, headers=headers)
+    data = response.json()
 
     # Parse Opensky response
-    gc.collect()
-    data = response.json()
-    response_time = data["time"]
+    unix_time = data["time"]
     states = data["states"]
-    print("Opensky data collected at " + str(datetime.fromtimestamp(response_time)))
+    time_str = str(datetime.fromtimestamp(unix_time))
+    print("Opensky data collected at " + time_str)
     print("Number of aircraft inside bounds: %s" % (len(states) if states else 0))
+
+    # Update time label
+    time_label.text = time_str
 
     # Clear previous aircraft icons
     while len(aircraft_group):
@@ -277,20 +301,16 @@ while True:
             tile_index = int((track + 23) / 45)
 
             # Add aircraft icon
-            tile_size = 16
             icon = displayio.TileGrid(
                 icon_sheet,
                 pixel_shader=palette,
-                width = 1,
-                height = 1,
                 tile_width = tile_size,
                 tile_height = tile_size,
+                default_tile=tile_index,
                 x = x,
-                y = y,
-                default_tile=tile_index
+                y = y
             )
             aircraft_group.append(icon)
-
 
     # Delay between loops
     time.sleep(30)
