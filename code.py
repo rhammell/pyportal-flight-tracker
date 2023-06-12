@@ -167,15 +167,15 @@ center_lon = -73.9712
 distance = 20
 
 # Display dimensions
-display_width = board.DISPLAY.width
-display_height = board.DISPLAY.height
+display_width = display.width
+display_height = display.height
 aspect_ratio = display_width / display_height
 
 # Calculate bounds
 print("Calculating map bounds...")
 lat_max, lat_min, lon_max, lon_min = get_bounds(center_lat, center_lon, distance, ratio=aspect_ratio)
 
-# Build Geoapify map URL
+# Geoapify map parameters
 map_params = {
     "style": "klokantech-basic",
     "width": display_width * 2,
@@ -184,10 +184,12 @@ map_params = {
     "format": "png",
     "area": "rect:%f,%f,%f,%f" % (lon_max, lat_max, lon_min, lat_min)
 }
+
+# Build Geoapify map URL
 map_url = build_url("https://maps.geoapify.com/v1/staticmap", map_params)
 print('Geoapify map URL: ' + map_url)
 
-# Build Adafruit IO image convert URL
+# Adafruit IO image convert parameters
 convert_params = {
     "x-aio-key": secrets["aio_key"],
     "width": display_width,
@@ -195,10 +197,13 @@ convert_params = {
     "output": "BMP16",
     "url": url_encode(map_url)
 }
+
+# Build Adafruit IO image convert URL
 convert_url = build_url(
     f"https://io.adafruit.com/api/v2/{secrets["aio_username"]}/integrations/image-formatter",
     convert_params
 )
+print('Converted Image URL: ' + convert_url)
 
 # Download converted map image
 image_fname = "/map.bmp"
@@ -212,13 +217,15 @@ image_sprite = displayio.TileGrid(image, pixel_shader=image.pixel_shader)
 map_group.append(image_sprite)
 main_group.append(map_group)
 
-# Build OpenSky URL
+# OpenSky search params
 opensky_params = {
     "lamin": lat_min,
     "lamax": lat_max,
     "lomin": lon_min,
     "lomax": lon_max
 }
+
+# Build OpenSky search URL
 opensky_url = build_url(
     "https://opensky-network.org/api/states/all",
     opensky_params
@@ -243,13 +250,15 @@ palette.make_transparent(0)
 aircraft_group = displayio.Group()
 main_group.append(aircraft_group)
 
-# Create time label and display group
+# Create time display group
+time_group  = displayio.Group()
+main_group.append(time_group)
+
+# Create time label
 time_label = label.Label(
     font = terminalio.FONT,
     color=0x000000,
     background_color=0xFFFFFF,
-    #anchor_point=(1.0,0),
-    #anchored_position=(display_width-5,5),
     anchor_point=(0,0),
     anchored_position=(5,5),
     padding_top = 2,
@@ -257,9 +266,8 @@ time_label = label.Label(
     padding_left = 2,
     padding_right = 2
 )
-time_group  = displayio.Group()
 time_group.append(time_label)
-main_group.append(time_group)
+
 
 # Processing loop
 while True:
@@ -270,8 +278,8 @@ while True:
     data = response.json()
 
     # Parse Opensky response
-    unix_time = data["time"]
     states = data["states"]
+    unix_time = data["time"]
     time_str = str(datetime.fromtimestamp(unix_time))
     print("Opensky data collected at " + time_str)
     print("Number of aircraft inside bounds: %s" % (len(states) if states else 0))
