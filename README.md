@@ -1,6 +1,7 @@
 # pyportal-flight-tracker
-Display the real-time positions of aircraft on a map using a PyPortal
+This repository contains the code, libraries, and images to build the PyPortal Flight Tracker. Read a full build tutorial for this project on [Hackster.io](https://www.hackster.io/rhammell/pyportal-flight-tracker-0be6b0). 
 
-<img src="img/flight_tracker.jpg" width="600">
+<img src="img/flight_tracker.jpg">
 
-Read a full build tutorial for this project on [Hackster.io](https://www.hackster.io/rhammell/pyportal-flight-tracker-0be6b0)
+
+
