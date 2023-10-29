@@ -6,7 +6,7 @@ The Flight Tracker collects and visualizes real-time flight data on a PyPortal d
 
 To begin, a custom map image is downloaded to the PyPortal, centered on a location coordinate defined by the user. This image serves as the background for the map display. 
 
-Then, at regular intervals of thirty seconds, the Flight Tracker sends a request to the OpenSky Network API, retrieving live aircraft data that falls within the boundaries of the map. 
+At regular intervals of thirty seconds, the Flight Tracker sends a request to the OpenSky Network API, retrieving live aircraft data that falls within the boundaries of the map. 
 
 The received aircraft positions are plotted as icons on the map, allowing users to easily view and track their movements in real-time.
 
