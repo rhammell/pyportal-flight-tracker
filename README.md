@@ -1,5 +1,7 @@
 # pyportal-flight-tracker
-This repository contains the code, libraries, and image assets required to build the PyPortal Flight Tracker. Read a full build tutorial for this project on [Hackster.io](https://www.hackster.io/rhammell/pyportal-flight-tracker-0be6b0).
+This repository contains the code, libraries, and image assets required to build the PyPortal Flight Tracker. 
+
+Read a full build tutorial for this project on [Hackster.io](https://www.hackster.io/rhammell/pyportal-flight-tracker-0be6b0).
 
 ## How It Works
 The Flight Tracker collects and visualizes real-time flight data on a PyPortal device, enabling users to track and monitor the live positions of aircraft through a dynamically updating map.
