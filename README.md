@@ -1,7 +1,8 @@
 # pyportal-flight-tracker
 This repository contains the code, libraries, and image assets required to build the PyPortal Flight Tracker. 
 
-Read a full build tutorial for this project on [Hackster.io](https://www.hackster.io/rhammell/pyportal-flight-tracker-0be6b0).
+Read the [project guide](https://www.hackster.io/rhammell/pyportal-flight-tracker-0be6b0) on Hackster.io for a full build tutorial. 
+
 
 ## Project Description
 <p align="center">
